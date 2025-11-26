@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tesla 浏览器全屏跳转工具</title>
+<style>
+  :root{
+    --bg:#0b0f12;
+    --card:#0f1518;
+    --muted:#8b98a2;
+    --accent:#6ee7b7;
+    --glass: rgba(255,255,255,0.03);
+    --danger:#ff6b6b;
+    --radius:14px;
+    font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  html,body{height:100%;background:
+    radial-gradient(1200px 600px at 10% 10%, rgba(24,58,78,0.16), transparent 6%),
+    linear-gradient(180deg,#071014 0%, var(--bg) 100%);
+    color:#e6eef3;margin:0;padding:24px;box-sizing:border-box}
+  .wrap{max-width:960px;margin:24px auto;padding:28px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:18px;box-shadow: 0 8px 30px rgba(2,6,8,0.6);border:1px solid rgba(255,255,255,0.03)}
+  header{display:flex;gap:16px;align-items:center;margin-bottom:18px}
+  .logo{width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,#0ea5a2,#5eead4);display:flex;align-items:center;justify-content:center;font-weight:700;color:#012;box-shadow:0 6px 20px rgba(14,165,162,0.12)}
+  h1{font-size:20px;margin:0}
+  p.lead{margin:0;color:var(--muted);font-size:13px}
+  form{margin-top:18px;display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+  input[type="text"]{
+    flex:1;min-width:260px;padding:12px 14px;border-radius:10px;background:var(--card);border:1px solid rgba(255,255,255,0.03);color: #e6eef3;font-size:14px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02)
+  }
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  button{background:linear-gradient(180deg,#052227,#06403b);border:none;color:#dffcf0;padding:10px 14px;border-radius:10px;font-weight:600;cursor:pointer;box-shadow:0 6px 18px rgba(3, 105, 100, 0.12)}
+  button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted);font-weight:600}
+  button.ghost{background:transparent;border:1px dashed rgba(255,255,255,0.04);color:var(--muted)}
+  .result{margin-top:18px;padding:14px;border-radius:12px;background:var(--glass);border:1px solid rgba(255,255,255,0.02);font-size:13px;word-break:break-all}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .tag{font-size:12px;color:var(--muted);padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.02)}
+  .preview{margin-top:12px;padding:10px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.02)}
+  .help{color:var(--muted);font-size:13px;margin-top:10px}
+  .danger{color:var(--danger);font-weight:700;margin-left:8px}
+  .small{font-size:12px;color:var(--muted)}
+  .copied{color:var(--accent);font-weight:700}
+  footer{margin-top:20px;color:var(--muted);font-size:12px}
+  @media (max-width:600px){.wrap{padding:16px}}
+</style>
+</head>
+<body>
+<div class="wrap" role="main">
+  <header>
+    <div class="logo">TF</div>
+    <div>
+      <h1>Tesla 浏览器全屏跳转工具</h1>
+      <p class="lead">把任意 URL 规范化为「域名首页」并生成适配腾讯视频 → 1905 → 目标的链路跳转 URL（深色主题）。</p>
+    </div>
+  </header>
+
+  <form id="form" onsubmit="return false;">
+    <input id="inputUrl" type="text" placeholder="在此输入目标 URL，例如：https://example.com/somepage or example.com:1234" autocomplete="off" />
+    <div class="controls">
+      <button id="generateBtn" type="button">生成跳转 URL</button>
+      <button id="openBtn" type="button" class="secondary">立即打开（导航）</button>
+      <button id="copyBtn" type="button" class="ghost">复制 URL</button>
+    </div>
+  </form>
+
+  <div class="result" id="result" aria-live="polite">
+    <div class="row">
+      <div class="tag">状态：<span id="status">等待输入</span></div>
+      <div class="tag">模式：<span id="mode">自动修正为域名首页（保留端口）</span></div>
+    </div>
+
+    <div class="preview" id="preview" style="margin-top:12px;">
+      <div class="small"><strong>规范化后的目标首页：</strong> <span id="normalized">—</span></div>
+      <div class="small" style="margin-top:8px;"><strong>1905 API URL：</strong> <span id="api1905">—</span></div>
+      <div class="small" style="margin-top:8px;"><strong>最终 v.qq.com 跳转 URL：</strong> <span id="finalUrl">—</span></div>
+    </div>
+
+    <div class="help" id="help">
+      <div>说明：1905 仅允许跳转到形如 <code>https://example.com?www.1905.com</code>（域名首页，可带端口）的目标；其它路径或带尾 / 将被裁剪。</div>
+      <div style="margin-top:6px;">若输入无协议，将默认加 <code>https://</code>；若输入包含路径或查询字符，会被裁切为仅保留协议、主机、端口。</div>
+    </div>
+  </div>
+
+  <footer>
+    <div>生成器遵从你提供的跳转链路：<code>v.qq.com → www.1905.com/api/redirec.html?redirect_url= &lt;目标?www.1905.com&gt;</code></div>
+  </footer>
+</div>
+
+<script>
+(function(){
+  const input = document.getElementById('inputUrl');
+  const genBtn = document.getElementById('generateBtn');
+  const openBtn = document.getElementById('openBtn');
+  const copyBtn = document.getElementById('copyBtn');
+  const normalizedEl = document.getElementById('normalized');
+  const api1905El = document.getElementById('api1905');
+  const finalUrlEl = document.getElementById('finalUrl');
+  const statusEl = document.getElementById('status');
+  const helpEl = document.getElementById('help');
+
+  // constants (按你的描述保留 redirec.html 的拼写)
+  const TENCENT_REDIRECT_BASE = 'https://v.qq.com/search_redirect.html?url=';
+  const SITE_1905 = 'https://www.1905.com/api/redirec.html?redirect_url='; // 注意：按用户描述为 redirec.html
+
+  function showStatus(msg, kind='normal'){
+    statusEl.textContent = msg;
+    if(kind === 'error'){
+      statusEl.classList.add('danger');
+    } else {
+      statusEl.classList.remove('danger');
+    }
+  }
+
+  function normalizeToHomepage(raw){
+    // Trim whitespace
+    if(!raw || typeof raw !== 'string') throw new Error('无效输入');
+    raw = raw.trim();
+
+    // If user pasted something like example.com?foo or example.com/path, try to add protocol if missing
+    let withProto = raw;
+    // If starts with //, add https:
+    if(withProto.startsWith('//')) withProto = 'https:' + withProto;
+    if(!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(withProto)){
+      withProto = 'https://' + withProto;
+    }
+
+    // Use URL constructor to parse; will throw on invalid URL
+    let url;
+    try {
+      url = new URL(withProto);
+    } catch (e) {
+      throw new Error('无法解析输入为合法 URL');
+    }
+
+    // Disallow credentialed URLs (user:pass@host)
+    if(url.username || url.password) {
+      // remove credentials for safety
+      url.username = '';
+      url.password = '';
+    }
+
+    // Build normalized homepage: keep protocol, hostname, optional port; remove path, search, hash
+    const port = url.port ? (':' + url.port) : '';
+    const normalized = `${url.protocol}//${url.hostname}${port}`;
+    return normalized;
+  }
+
+  function buildChainUrl(targetHomepage){
+    // targetHomepage is canonical like https://example.com or https://example.com:1234
+    // inner redirect target expected: <targetHomepage>?www.1905.com
+    const innerTarget = targetHomepage + '?www.1905.com';
+    // encode inner target for 1905 API
+    const encodedInner = encodeURIComponent(innerTarget);
+    const url1905 = SITE_1905 + encodedInner;
+    // then encode the whole 1905 url as url parameter to v.qq.com
+    const final = TENCENT_REDIRECT_BASE + encodeURIComponent(url1905);
+    return { innerTarget, url1905, final };
+  }
+
+  function updateUIFromRaw(raw){
+    try {
+      showStatus('处理中…');
+      const normalized = normalizeToHomepage(raw);
+      const { innerTarget, url1905, final } = buildChainUrl(normalized);
+
+      normalizedEl.textContent = normalized;
+      api1905El.textContent = url1905;
+      finalUrlEl.textContent = final;
+
+      showStatus('已生成', 'normal');
+      return final;
+    } catch (e) {
+      normalizedEl.textContent = '—';
+      api1905El.textContent = '—';
+      finalUrlEl.textContent = '—';
+      showStatus('错误：' + e.message, 'error');
+      throw e;
+    }
+  }
+
+  // events
+  genBtn.addEventListener('click', () => {
+    try {
+      const raw = input.value;
+      updateUIFromRaw(raw);
+    } catch(e) {
+      // error already shown
+    }
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    try {
+      const raw = input.value;
+      const final = updateUIFromRaw(raw);
+      await navigator.clipboard.writeText(final);
+      copyBtn.textContent = '已复制 ✓';
+      copyBtn.classList.add('copied');
+      setTimeout(()=>{ copyBtn.textContent = '复制 URL'; copyBtn.classList.remove('copied'); }, 1400);
+    } catch(e){
+      // do nothing special
+    }
+  });
+
+  openBtn.addEventListener('click', () => {
+    try {
+      const raw = input.value;
+      const final = updateUIFromRaw(raw);
+      // 导航到最终 URL（当前窗口）
+      // 注意：某些浏览器会在跨域导航时有额外行为；本控件只负责生成并导航
+      window.location.href = final;
+    } catch(e){
+      // error already displayed
+    }
+  });
+
+  // convenience: press Enter to generate
+  input.addEventListener('keydown', (ev) => {
+    if(ev.key === 'Enter') {
+      ev.preventDefault();
+      genBtn.click();
+    }
+  });
+
+  // small helper: paste example on double-click of header
+  document.querySelector('header').addEventListener('dblclick', ()=> {
+    const examples = [
+      'example.com',
+      'example.com:1234',
+      'https://example.com/somepage?x=1',
+      'http://sub.domain.example.cn/path/',
+      '192.168.1.10:8080/index.html'
+    ];
+    input.value = examples[Math.floor(Math.random()*examples.length)];
+    genBtn.click();
+  });
+
+  // initial placeholder
+  input.value = '';
+})();
+</script>
+</body>
+</html>

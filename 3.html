@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tesla 全屏跳转</title>
+<style>
+  :root {
+    --bg:#0b0f12;
+    --card:#0f1518;
+    --accent:#6ee7b7;
+    --muted:#9aa6b1;
+    font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  body{
+    margin:0;padding:0;height:100vh;
+    display:flex;flex-direction:column;align-items:center;
+    background:radial-gradient(900px 600px at 20% 10%,rgba(24,58,78,0.18),transparent 6%),
+               linear-gradient(180deg,#071014 0%,var(--bg) 100%);
+    color:#e6eef3;
+  }
+  .box{
+    width:92%;max-width:480px;margin-top:60px;
+    padding:28px;
+    background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));
+    border-radius:18px;
+    box-shadow:0 8px 28px rgba(2,6,8,0.6);
+    border:1px solid rgba(255,255,255,0.03);
+    text-align:center;position:relative;
+  }
+  h1{margin:0 0 20px;font-size:22px;font-weight:600;}
+
+  /* 开关 */
+  .toggle-wrap{
+    position:absolute;right:20px;top:20px;
+    display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);
+  }
+  .switch{
+    position:relative;width:44px;height:22px;
+  }
+  .switch input{opacity:0;width:0;height:0;}
+  .slider{
+    position:absolute;cursor:pointer;inset:0;
+    background:#2a3135;border-radius:22px;
+    transition:.25s;
+  }
+  .slider:before{
+    content:"";position:absolute;height:16px;width:16px;
+    left:3px;bottom:3px;border-radius:50%;
+    background:white;transition:.25s;
+  }
+  input:checked + .slider{
+    background:#0f7a68;
+  }
+  input:checked + .slider:before{
+    transform:translateX(22px);
+  }
+
+  input[type="text"]{
+    width:100%;padding:14px 16px;margin-top:10px;
+    border-radius:12px;border:1px solid rgba(255,255,255,0.05);
+    background:var(--card);color:#e6eef3;font-size:15px;box-sizing:border-box;
+  }
+  button{
+    width:100%;padding:14px;border:none;margin-top:16px;
+    border-radius:12px;font-size:16px;font-weight:600;
+    background:linear-gradient(180deg,#0c3e3c,#0a2f2d);
+    color:#dffcf0;cursor:pointer;
+    box-shadow:0 6px 20px rgba(3,105,100,0.25);
+  }
+
+  /* 历史记录卡片区 */
+  .history{
+    width:92%;max-width:480px;margin-top:24px;
+    display:flex;flex-wrap:wrap;gap:12px;justify-content:center;
+  }
+  .card{
+    padding:12px 16px;border-radius:14px;
+    background:rgba(255,255,255,0.02);
+    border:1px solid rgba(255,255,255,0.04);
+    color:var(--accent);font-size:14px;
+    cursor:pointer;user-select:none;
+    box-shadow:0 2px 10px rgba(10,20,25,0.4);
+    transition:.15s;
+  }
+  .card:hover{
+    transform:translateY(-2px);
+    box-shadow:0 4px 14px rgba(10,20,25,0.6);
+  }
+</style>
+</head>
+
+<body>
+
+<div class="box">
+  <h1>Tesla 全屏跳转</h1>
+
+  <!-- 缓存开关 -->
+  <div class="toggle-wrap">
+    缓存
+    <label class="switch">
+      <input id="cacheToggle" type="checkbox" checked>
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <input id="u" type="text" placeholder="输入目标 URL…" />
+  <button id="go">跳转并全屏</button>
+</div>
+
+<!-- 历史记录展示区 -->
+<div class="history" id="history"></div>
+
+<script>
+const TENCENT = "https://v.qq.com/search_redirect.html?url=";
+const SITE1905 = "https://www.1905.com/api/redirec.html?redirect_url=";
+const STORAGE_KEY = "tesla_jump_history";
+
+function normalize(raw){
+  if(!raw) throw "请输入 URL";
+  raw = raw.trim();
+  if(raw.startsWith("//")) raw = "https:" + raw;
+  if(!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) raw = "https://" + raw;
+
+  let url;
+  try{ url = new URL(raw); }
+  catch(e){ throw "URL 无法解析"; }
+
+  return `${url.protocol}//${url.hostname}${url.port ? ":"+url.port : ""}`;
+}
+
+function build(u){
+  const inner = u + "?www.1905.com";
+  const url1905 = SITE1905 + encodeURIComponent(inner);
+  return TENCENT + encodeURIComponent(url1905);
+}
+
+/* --- 本地缓存 --- */
+function loadHistory(){
+  return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+}
+function saveToHistory(url){
+  if(!document.getElementById("cacheToggle").checked) return;
+  let list = loadHistory();
+  if(!list.includes(url)){
+    list.unshift(url);
+    if(list.length > 12) list.pop();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  }
+}
+function renderHistory(){
+  const list = loadHistory();
+  const wrap = document.getElementById("history");
+  wrap.innerHTML = "";
+  list.forEach(u=>{
+    const card = document.createElement("div");
+    card.className = "card";
+    card.textContent = u.replace(/^https?:\/\//,"");
+    card.onclick = ()=>{ document.getElementById("u").value = u; };
+    wrap.appendChild(card);
+  });
+}
+
+/* --- 跳转 --- */
+document.getElementById("go").onclick = () => {
+  try{
+    const raw = document.getElementById("u").value;
+    const home = normalize(raw);
+    const final = build(home);
+
+    saveToHistory(home);
+    renderHistory();
+
+    window.location.href = final;
+  }catch(err){
+    alert(err);
+  }
+};
+
+renderHistory();
+</script>
+
+</body>
+</html>

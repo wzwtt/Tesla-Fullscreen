@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tesla 全屏跳转</title>
+<style>
+  :root {
+    --bg:#0b0f12;
+    --card:#0f1518;
+    --accent:#6ee7b7;
+    font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  body{
+    margin:0;padding:0;height:100vh;
+    display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(1000px 600px at 20% 10%,rgba(24,58,78,0.16),transparent 6%),
+               linear-gradient(180deg,#071014 0%,var(--bg) 100%);
+    color:#e6eef3;
+  }
+  .box{
+    width:92%;max-width:460px;
+    padding:28px;
+    background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));
+    border-radius:18px;
+    box-shadow:0 8px 28px rgba(2,6,8,0.6);
+    border:1px solid rgba(255,255,255,0.03);
+    text-align:center;
+  }
+  h1{
+    margin:0 0 20px 0;font-size:22px;font-weight:600;color:#d8e8ef;
+  }
+  input{
+    width:100%;padding:14px 16px;margin-bottom:16px;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,0.05);
+    background:var(--card);color:#e6eef3;font-size:15px;
+    box-sizing:border-box;
+  }
+  button{
+    width:100%;padding:14px;border:none;
+    border-radius:12px;font-size:16px;font-weight:600;
+    background:linear-gradient(180deg,#0c3e3c,#0a2f2d);
+    color:#dffcf0;cursor:pointer;
+    box-shadow:0 6px 20px rgba(3,105,100,0.25);
+  }
+  button:active{
+    transform:scale(0.98);
+  }
+</style>
+</head>
+
+<body>
+<div class="box">
+  <h1>Tesla 全屏跳转</h1>
+  <input id="u" type="text" placeholder="输入目标 URL（任意格式均可）" />
+  <button id="go">跳转并全屏</button>
+</div>
+
+<script>
+const TENCENT = "https://v.qq.com/search_redirect.html?url=";
+const SITE1905 = "https://www.1905.com/api/redirec.html?redirect_url="; // 保持你提供的 redirec.html
+
+function normalize(raw){
+  if(!raw) throw "请输入 URL";
+  raw = raw.trim();
+
+  // 自动补协议
+  if(raw.startsWith("//")) raw = "https:" + raw;
+  if(!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) raw = "https://" + raw;
+
+  let url;
+  try{ url = new URL(raw); }
+  catch(e){ throw "URL 无法解析"; }
+
+  // 去掉路径、参数、hash，保留协议 + 域名 + 端口
+  return `${url.protocol}//${url.hostname}${url.port ? ":"+url.port : ""}`;
+}
+
+function build(u){
+  const inner = u + "?www.1905.com";
+  const url1905 = SITE1905 + encodeURIComponent(inner);
+  return TENCENT + encodeURIComponent(url1905);
+}
+
+document.getElementById("go").onclick = ()=>{
+  try{
+    const input = document.getElementById("u").value;
+    const home = normalize(input);
+    const final = build(home);
+    window.location.href = final;
+  }catch(err){
+    alert(err);
+  }
+};
+</script>
+
+</body>
+</html>

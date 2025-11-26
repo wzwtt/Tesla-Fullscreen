@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tesla 全屏跳转</title>
+<style>
+  :root{
+    --bg:#0b0f12;
+    --card:#0f1518;
+    --accent:#6ee7b7;
+    --muted:#9aa6b1;
+    --danger:#ff6b6b;
+    font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  html,body{height:100%;margin:0;background:
+    radial-gradient(900px 600px at 20% 10%, rgba(24,58,78,0.18), transparent 6%),
+    linear-gradient(180deg,#071014 0%,var(--bg) 100%);color:#e6eef3;}
+  .container{display:flex;flex-direction:column;align-items:center;padding:40px 16px;}
+  .card-main{
+    width:100%;max-width:520px;background:
+    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius:16px;padding:26px;position:relative;
+    box-shadow:0 8px 30px rgba(2,6,8,0.6);border:1px solid rgba(255,255,255,0.03);
+    text-align:center;
+  }
+  h1{margin:0;font-size:20px;font-weight:600;color:#d8e8ef}
+  /* toggle */
+  .toggle-wrap{position:absolute;right:16px;top:16px;display:flex;gap:8px;align-items:center;color:var(--muted);font-size:13px}
+  .switch{position:relative;width:46px;height:24px}
+  .switch input{opacity:0;width:0;height:0}
+  .slider{position:absolute;inset:0;background:#2a3135;border-radius:24px;transition:.22s;cursor:pointer}
+  .slider:before{content:"";position:absolute;left:4px;top:4px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.22s}
+  .switch input:checked + .slider{background:#0f7a68}
+  .switch input:checked + .slider:before{transform:translateX(22px)}
+  /* input & buttons */
+  .input{
+    margin-top:16px;width:100%;display:flex;gap:12px;
+  }
+  .input input[type="text"]{
+    flex:1;padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.04);
+    background:var(--card);color:inherit;font-size:15px;box-sizing:border-box;
+  }
+  .btn{
+    min-width:140px;border-radius:12px;padding:12px 14px;border:none;
+    font-weight:700;background:linear-gradient(180deg,#0c3e3c,#0a2f2d);color:#dffcf0;
+    cursor:pointer;box-shadow:0 6px 20px rgba(3,105,100,0.20);
+  }
+  .btn.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);box-shadow:none}
+  .clear-all{
+    margin-top:12px;background:transparent;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:14px;
+  }
+  /* history area */
+  .history{
+    width:100%;max-width:520px;margin-top:20px;display:flex;flex-wrap:wrap;gap:12px;justify-content:center;
+  }
+  .hist-card{
+    padding:10px 14px;border-radius:12px;background:rgba(255,255,255,0.02);
+    border:1px solid rgba(255,255,255,0.04);color:var(--accent);font-size:14px;
+    cursor:pointer;user-select:none;box-shadow:0 2px 12px rgba(0,0,0,0.45);transition:transform .12s,box-shadow .12s;position:relative;
+  }
+  .hist-card:hover{transform:translateY(-4px);box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+  .hint{margin-top:8px;font-size:12px;color:var(--muted)}
+  @media (max-width:420px){
+    .btn{min-width:120px}
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="card-main" role="main" aria-label="Tesla 全屏跳转工具">
+      <h1>Tesla 全屏跳转</h1>
+
+      <div class="toggle-wrap" title="开启后会将成功跳转的域名保存到本地历史">
+        缓存
+        <label class="switch" aria-hidden="true">
+          <input id="cacheToggle" type="checkbox" checked />
+          <span class="slider" aria-hidden="true"></span>
+        </label>
+      </div>
+
+      <div class="input" style="align-items:center">
+        <input id="u" type="text" placeholder="输入目标 URL（任意格式）" aria-label="目标URL" />
+        <button id="go" class="btn" aria-label="跳转并全屏">跳转并全屏</button>
+      </div>
+
+      <button id="clearAll" class="clear-all" title="一键清除所有历史">清除全部历史记录</button>
+
+      <div class="hint">点击历史卡片直接跳转；长按卡片（0.75s）可删除该条记录。</div>
+    </div>
+
+    <div id="history" class="history" aria-live="polite" aria-label="历史记录区域"></div>
+  </div>
+
+<script>
+(function(){
+  'use strict';
+
+  const TENCENT = "https://v.qq.com/search_redirect.html?url=";
+  const SITE1905 = "https://www.1905.com/api/redirec.html?redirect_url=";
+  const STORAGE_KEY = "tesla_jump_history_v1";
+  const MAX_HISTORY = 12;
+  const LONGPRESS_MS = 750;
+
+  // utils
+  function normalize(raw){
+    if(!raw) throw "请输入 URL";
+    raw = String(raw).trim();
+    if(raw.startsWith("//")) raw = "https:" + raw;
+    if(!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) raw = "https://" + raw;
+    let url;
+    try { url = new URL(raw); } catch(e) { throw "URL 无法解析"; }
+    return url.protocol + "//" + url.hostname + (url.port ? ":" + url.port : "");
+  }
+
+  function build(targetHomepage){
+    const inner = targetHomepage + "?www.1905.com";
+    const url1905 = SITE1905 + encodeURIComponent(inner);
+    return TENCENT + encodeURIComponent(url1905);
+  }
+
+  // storage
+  function loadHistory(){
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return [];
+      const parsed = JSON.parse(raw);
+      if(!Array.isArray(parsed)) return [];
+      return parsed;
+    } catch (e) {
+      console.error("loadHistory error", e);
+      return [];
+    }
+  }
+
+  function saveHistory(list){
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    }catch(e){
+      console.error("saveHistory error", e);
+    }
+  }
+
+  function addToHistory(item){
+    if(!document.getElementById('cacheToggle').checked) return;
+    const list = loadHistory();
+    if(list.includes(item)) return;
+    list.unshift(item);
+    if(list.length > MAX_HISTORY) list.length = MAX_HISTORY;
+    saveHistory(list);
+  }
+
+  function removeFromHistory(item){
+    const list = loadHistory().filter(x => x !== item);
+    saveHistory(list);
+    renderHistory();
+  }
+
+  function clearAllHistory(){
+    try { localStorage.removeItem(STORAGE_KEY); } catch(e){ console.error(e); }
+    renderHistory();
+  }
+
+  // rendering
+  function renderHistory(){
+    const wrap = document.getElementById('history');
+    wrap.innerHTML = '';
+    const list = loadHistory();
+    if(!list.length) return;
+    list.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'hist-card';
+      // display without protocol
+      card.textContent = item.replace(/^https?:\/\//i, '');
+      wrap.appendChild(card);
+
+      // long-press / click handling (mouse and touch)
+      let timer = null;
+      let longPressed = false;
+
+      function startPress(){
+        longPressed = false;
+        timer = setTimeout(() => {
+          longPressed = true;
+          removeFromHistory(item);
+        }, LONGPRESS_MS);
+      }
+      function cancelPress(){
+        if(timer){ clearTimeout(timer); timer = null; }
+      }
+
+      // mouse events
+      card.addEventListener('mousedown', (e) => {
+        if(e.button !== 0) return; // only left click
+        startPress();
+      });
+      card.addEventListener('mouseup', () => {
+        if(timer){ cancelPress(); }
+      });
+      card.addEventListener('mouseleave', () => {
+        cancelPress();
+      });
+
+      // touch events
+      card.addEventListener('touchstart', (e) => {
+        // prevent mouse events from also firing on some browsers
+        startPress();
+      }, {passive:true});
+      card.addEventListener('touchend', () => { cancelPress(); });
+      card.addEventListener('touchcancel', () => { cancelPress(); });
+
+      // click -> direct jump (ignore if longPressed triggered)
+      card.addEventListener('click', (e) => {
+        // if longPressed happened, we don't proceed with jump
+        if(longPressed) { longPressed = false; return; }
+        // perform jump
+        try {
+          const final = build(item);
+          // Save to history (move to top if not present)
+          addToHistory(item);
+          renderHistory();
+          // navigate
+          window.location.href = final;
+        } catch (err) {
+          alert(err);
+        }
+      });
+    });
+  }
+
+  // main actions
+  document.getElementById('go').addEventListener('click', () => {
+    const raw = document.getElementById('u').value;
+    try {
+      const home = normalize(raw);
+      const final = build(home);
+      addToHistory(home);
+      renderHistory();
+      window.location.href = final;
+    } catch (err) {
+      alert(err);
+    }
+  });
+
+  document.getElementById('clearAll').addEventListener('click', () => {
+    if(!confirm('确定要清除全部历史记录吗？')) return;
+    clearAllHistory();
+  });
+
+  // render initially
+  renderHistory();
+
+  // expose for debugging (safe)
+  window.__tesla_jump = {
+    normalize, build, loadHistory, clearAllHistory
+  };
+})();
+</script>
+</body>
+</html>
